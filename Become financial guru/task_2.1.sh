@@ -1,0 +1,2 @@
+# !/bin/bash
+jq '.prices | map({"date":(.[0]/1000 | strftime("%Y-%m-%d")), "value":.[1]}) | reduce .[] as $pair ({}; .[$pair.date | sub("-\\d+$"; "")] += [$pair.value]) | {data: [to_entries[] | {month: .key, vol: ((((.value | add/length) - (.value | min)) + ((.value | max) - (.value | add/length))) / 2) }]} | .data | map(select(.month>= "2015-01" and (.month | contains("-03")) and .vol != 0)) | min_by(.vol) | "The price was the least volatile since in " + .month + " " + "value = " + (.vol | tostring | split(".") | .[0] + "." + .[1][:3])' quotes.json
