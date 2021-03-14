@@ -1,0 +1,100 @@
+---
+- name: test connection to my server
+  hosts: all
+  become: yes
+
+  vars:
+     devops_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          36663766646465633339636431663864343963653737646335333230393737303366313463333334
+          3263393233636263353266653333396663666364373632300a393562616331386262396135336139
+          34383462366232303261656163376232303134653965626461383534653436653738313430333264
+          3762386431663362310a636236306630346130663435333530353233363938346133656366306530
+          6239
+
+  tasks:
+  
+   - name: ping my server
+     ping:
+
+   - name: Add a new user named devops
+     user:
+          name: devops
+          shell: /bin/bash
+          password: "{{ devops_password }}"
+
+   - name: Add devops user to the sudoers
+     copy:
+          dest: "/etc/sudoers.d/devops"
+          content: "devops  ALL=(ALL)  NOPASSWD: ALL"  
+
+   - name: Disable Password Authentication
+     lineinfile:
+           dest=/etc/ssh/sshd_config
+           regexp='^PasswordAuthentication'
+           line="PasswordAuthentication no"
+           state=present
+           backup=yes
+
+   - name: Disable Root Login
+     lineinfile:
+           dest=/etc/ssh/sshd_config
+           regexp='^PermitRootLogin'
+           line="PermitRootLogin no"
+           state=present
+           backup=yes
+     notify: restart ssh 
+  
+   - name: Install the iptables package
+     apt:
+      name: iptables
+      state: latest
+
+   - name: Firewall rule - allow all loopback traffic
+     iptables:
+      action: append
+      chain: INPUT
+      in_interface: lo
+      jump: ACCEPT
+
+   - name: Firewall rule - allow established connections
+     iptables:
+      chain: INPUT
+      ctstate: ESTABLISHED,RELATED
+      jump: ACCEPT
+
+   - name: Firewall rule - allow port ping traffic
+     iptables:
+      chain: INPUT
+      jump: ACCEPT
+      protocol: icmp
+
+   - name: Firewall rule - allow port 22/SSH traffic
+     iptables:
+      chain: INPUT
+      destination_port: 22
+      jump: ACCEPT
+      protocol: tcp
+
+   - name: Firewall rule - allow port 80/HTTP traffic
+     iptables:
+      chain: INPUT
+      destination_port: 80
+      jump: ACCEPT
+      protocol: tcp
+
+   - name: Firewall rule - allow port 443/HTTPS traffic
+     iptables:
+      chain: INPUT
+      destination_port: 443
+      jump: ACCEPT
+      protocol: tcp
+   
+   - name: Firewall rule - drop any traffic without rule
+     iptables:
+      chain: INPUT
+      jump: DROP
+
+   handlers:
+   - name: restart ssh
+     service: name=sshd state=restarted
